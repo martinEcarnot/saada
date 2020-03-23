@@ -7,18 +7,18 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(gridExtra)
 library(ggplot2)
-library(ggplotify)
+# library(ggplotify)
 library(rnirs)
 library(R.matlab)
 source("~/Documents/INRA/R/pre.R")
-source("~/Documents/INRA/R/orthEf2.R")
-source('~/Documents/INRA/melanges/2019/saada2019_PE_B.R')
+source("orthEf2.R")
+source('saada2019_PE_B.R')
 
 ```
 
 Axes PLS: Rep2 projetée sur axes Rep1
 ```{r}
-load("~/Documents/INRA/melanges/2019/saada2019_sp_Brimrose")
+load("saada2019_sp_Brimrose")
 
 mono=droplevels(sp[grep("mono",sp$Culture),])
 ngeno=nlevels(mono$Genotype1)
