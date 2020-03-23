@@ -1,0 +1,167 @@
+---
+title: "Discrimination"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(gridExtra)
+library(ggplot2)
+library(ggplotify)
+library(rnirs)
+library(R.matlab)
+source("~/Documents/INRA/R/pre.R")
+source("~/Documents/INRA/R/orthEf2.R")
+source('~/Documents/INRA/melanges/2019/saada2019_PE_B.R')
+
+```
+
+Axes PLS: Rep2 projetée sur axes Rep1
+```{r}
+load("~/Documents/INRA/melanges/2019/saada2019_sp_Brimrose")
+
+mono=droplevels(sp[grep("mono",sp$Culture),])
+ngeno=nlevels(mono$Genotype1)
+
+# Pré
+p=rbind(list('red',c(10,1,1)),list('snv',''),list('detr',''))
+mono$xp=pre(mono$x,p)
+comp=15
+# 
+# Porj orth sur l effet rep a partir des 29 premiers geno
+# mo29=droplevels(mono[mono$Genotype1 %in% levels(mono$Genotype1)[1:30],])
+# kW=orthEf2(mo29,"xp",c(4),5)  
+
+i=40
+j=41
+g1=levels(mono$Genotype1)[i]
+g2=levels(mono$Genotype1)[j]
+
+ideux=mono$Genotype1 %in% c(g1,g2) #& mono$traitement=="T-S"
+mono2=droplevels(mono[ideux,])
+
+  ngeno2=nlevels(mono2$Genotype1)
+  
+  # mono2$xp = mono2$xp - (mono2$xp %*% kW %*% t(kW))
+  
+  Xr=mono2[mono2$Rep == 1,]
+  Xu=mono2[mono2$Rep == 2,]
+  
+  # ?quilibrage des effectifs
+  t=table(Xu$Genotype1)
+  gmin=which.min(t)
+  gmax=which.max(t)
+  imax=which(Xu$Genotype1==names(gmax))
+  iout=imax[sample(t[gmax],abs(t[1]-t[2]))]
+  if (length(iout)!=0) {Xu=Xu[-iout,]}
+  
+  t=table(Xr$Genotype1)
+  gmin=which.min(t)
+  gmax=which.max(t)
+  imax=which(Xr$Genotype1==names(gmax))
+  iout=imax[sample(t[gmax],abs(t[1]-t[2]))]
+  if (length(iout)!=0) {Xr=Xr[-iout,]}
+  
+  ngenoXr=nlevels(Xr$Genotype1)
+  segm=segmcvkfold(n = nrow(Xr$xp), K = 2, nrep = 3)
+  
+  # fm <- fitcv(Xr$xp, Xr$Genotype1,fun = plsda,  ncomp = comp,  segm = segm, da="dalm")
+  # z <- err(fm, ~ ncomp)
+  # regine.valette@inrae.fr
+  minw=selncomp.wold(z, nam="errp",plot=F,typ = "smooth")$sel
+  # if (is.na(minw)) {minw=which.min(z$errp)}
+  
+  # fm <- plsda(Xr$xp,Xr$Genotype1,Xu$xp,Xu$Genotype1, ncomp=comp, da=dadis, diss="mahalanobis")
+  fm <- plsda(Xr$xp,Xr$Genotype1,Xu$xp,Xu$Genotype1, ncomp=comp, da=dalm)
+
+  # correction de la moyenne du jeu de cal
+      diffm=colMeans(Xr$xp)-colMeans(Xu$xp)
+      Xu$xpd=Xu$xp + rep(1, nrow(Xu)) %*% t(diffm)
+      Xr$xpd=Xr$xp
+  fmd <- plsda(Xr$xp,Xr$Genotype1,Xu$xpd,Xu$Genotype1, ncomp=comp, da=dalm)
+
+
+df=as.data.frame(rbind(fm$fm$Tr,fm$fm$Tu))
+df=cbind(df,rbind(Xr,Xu))
+ggplot(data = df,aes(x=comp3,y=comp4, col=Genotype1,size=Rep)) +geom_point() + stat_ellipse(level=0.6)
+
+dfd=as.data.frame(rbind(fmd$fm$Tr,fmd$fm$Tu))
+dfd=cbind(dfd,rbind(Xr,Xu))
+ggplot(data = dfd,aes(x=comp3,y=comp4, col=Genotype1,size=Rep)) +geom_point() + stat_ellipse(level=0.6)
+
+writeMat(df,file="~/Documents/INRA/melanges/2019/saada2019_i40j41_Xur.mat")
+```
+Erreur de VALIDATION en fonction des VL
+```{r valid VL}
+load('/home/ecarnot/Documents/INRA/melanges/2019/zt_mt_corr')
+names(zt_mt_corr)=c("zt_mt_B_0","zt_mt_B_cP","zt_mt_B_cM","zt_mt_B_REP","zt_mt_B_REPcP","zt_mt_B_REPcM")
+names(zt_mt_corr)=c("Rien","Corr Moy spectres","Corr Moy Scores","REP-ASCA","REP-ASCA + Corr Moy spectres","REP-ASCA + Corr Moy Scores")
+
+# par(mfrow=c(6,2))
+# p <- list()
+for(i in 1:6){
+  zt_mt_B=zt_mt_corr[[i]]
+  # Erreur en fct de VL
+  ervl=matrix(unlist(lapply(zt_mt_B[[1]], "[", , 2)),ncol=15,byrow=T)
+  
+ncpl=length(zt_mt_B[[1]])
+errB=matrix(nrow=ncpl, ncol=8)  #matrix(nrow=ncpl,colnames=c('erCV','erVw','erVm'))
+for (j in 1:ncpl) {
+  errB1=zt_mt_B[[1]][[j]]
+  errB[j,1]=errB1[zt_mt_B[[2]][[j]][1],1]
+  errB[j,2]=errB1[zt_mt_B[[2]][[j]][1],2]
+  errB[j,3]=min(errB1[,2])
+  errB[j,4]=zt_mt_B[[2]][[j]][1]
+  errB[j,5]=zt_mt_B[[2]][[j]][2]
+  errB[j,6]=errB1[6,2]
+  errB[j,7]=abs(errB[j,4]- errB[j,5])
+}
+  plotsp(ervl,main=names(zt_mt_corr)[i])
+  text(x=12,y=0.9, label=sprintf("SECV = %3.2f",mean(errB[,1])))
+  text(x=12,y=0.8, label=sprintf("SEV = %3.2f",mean(errB[,2])))
+  text(x=12,y=0.7, sprintf("SEVmin = %3.2f",mean(errB[,3])))
+  
+  plot(errB[,1],errB[,2],main=names(zt_mt_corr)[i])
+  text(x=max(errB[,1])-0.05,y=max(errB[,2])-0.1, sprintf("corr2 = %3.2f",cor(errB[,1],errB[,2])^2))
+  # for (j in 1:nrow(ervl)) {
+  #   mt=zt_mt_B[[2]][[j]]
+  #   points(mt[1],ervl[j,mt[1]],col="blue")
+  #   points(mt[2],ervl[j,mt[2]],col="red")
+  # }
+}
+```
+
+Histogrammes des erreurs de validation
+```{r Histogrammes}
+load('/home/ecarnot/Documents/INRA/melanges/2019/zt_mt_corr')
+names(zt_mt_corr)=c("zt_mt_B_0","zt_mt_B_cP","zt_mt_B_cM","zt_mt_B_REP","zt_mt_B_REPcP","zt_mt_B_REPcM")
+names(zt_mt_corr)=c("Rien","Corr Moy spectres","Corr Moy Scores","REP-ASCA","REP-ASCA + Corr Moy spectres","REP-ASCA + Corr Moy Scores")
+
+# par(mfrow=c(2,3))
+p=list()
+c=1
+for(i in 1:6){
+  zt_mt_B=zt_mt_corr[[i]]
+  # Erreur en fct de VL
+  ervl=matrix(unlist(lapply(zt_mt_B[[1]], "[", , 2)),ncol=15,byrow=T)
+  
+ncpl=length(zt_mt_B[[1]])
+errB=matrix(nrow=ncpl, ncol=8) 
+for (j in 1:ncpl) {
+  errB1=zt_mt_B[[1]][[j]]
+  errB[j,1]=errB1[zt_mt_B[[2]][[j]][1],1]
+  errB[j,2]=errB1[zt_mt_B[[2]][[j]][1],2]
+  errB[j,3]=min(errB1[,2])
+  errB[j,4]=zt_mt_B[[2]][[j]][1]
+  errB[j,5]=zt_mt_B[[2]][[j]][2]
+  errB[j,6]=errB1[6,2]
+  errB[j,7]=abs(errB[j,4]- errB[j,5])
+}
+  df=as.data.frame(errB)
+  p[[c]]=ggplot(df, aes(x=V2)) +geom_histogram(color="darkblue", fill="lightblue", breaks=seq(0,0.8,0.1))  + theme(text = element_text(size=5))  +labs(title=names(zt_mt_corr)[i], x ="Erreur de Validation selon minCV")
+  c=c+1
+  p[[c]]=ggplot(df, aes(x=V3)) +geom_histogram(color="darkblue", fill="lightblue", breaks=seq(0,0.8,0.1))  + theme(text = element_text(size=5))  +labs(title=names(zt_mt_corr)[i], x ="Erreur de Validation min pour ttes VL")
+  c=c+1
+}
+do.call("grid.arrange", c(p, ncol=2, nrow = 6))
+```
